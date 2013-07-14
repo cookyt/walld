@@ -1,13 +1,24 @@
+All messages begin with "error" or "done" on the first line
+
 server
   command interpreter
     commands
       next
+        restarts timer
+        goes to next background
       refresh
+        recalculates background and reapplies it
       var [varname [newvalue]]
-      mode [newmode]
+        no args
+          prints name-value pairs for all settable variables
+        1 arg
+          shows that variable, its current value, and description of it
+        2 args
+          sets the given arg to a new value
   action timeout
     time to wait
     randomized wait (gaussian max range)
+
 action
   chooser
     random from directory(s)

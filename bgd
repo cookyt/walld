@@ -28,35 +28,64 @@ def GaussianRandomTime(avg_time, max_range):
       if avg_time - max_range < num < avg_time + max_range:
         return int(num)
 
-def _pass(s=None):
-  if s is None:
-    return ""
-  else:
-    return True
+class FehBackgroundSetter(object):
+  """ Class for setting the background. Uses the program `feh' to do this."""
 
-class RandomDirectoryBackground:
-  """Sets backgrounds randomly from a directory. Rescans the directory on
+  kScaleDescription = """
+The style used to size the image. Supported values are:
+  + center
+  + fill
+  + max
+  + scale
+  + tile
+See the feh man page for info on what each mean.
+"""
+
+  @staticmethod
+  def _ValidateStyle(style):
+    valid_styles = {"center", "fill", "max", "scale", "tile"}
+    return (style in valid_styles);
+
+  config = {
+    "image_style" : ("scale", kScaleDescription, _ValidateStyle)
+  }
+
+  def Set(self, filepath, style="scale"):
+    """ Sets the background to the given file. Returns True if the command
+    succeeds.
+      filepath: The background file to use. Can be any of the image types
+                supported by `feh', use a full-path.
+    """
+    return (subprocess.call(["feh", "--bg-" + self.config["image_style"][0],
+                            "--no-fehbg", filepath]) == 0)
+
+class RandomDirectoryBackground(object):
+  """ Sets backgrounds randomly from a directory. Rescans the directory on
   wakeup."""
 
+  noop = lambda s : True
+
   """ Dictionary of configurable options.
-  key:String, val:(String, func)
-  where func is a function which either takes a string and returns a bool for 
-        whether it validates the for the value specifier, or takes nothing and
-        returns a string describing the how the string should be formatted.
+  key:String, val:(value:String, description:String,
+                   validate:Function(String)->Bool)
+
+  where key is the externally-visible variable name
+        value is the current value of the variable
+        description is a string describing what the variable does and what a
+          valid value should look like
+        validator is a function which validates the value
   """
   config = {
-    "directory"          : ("/home/carlos/pics/wall/", _pass),
-    "tmp_file_name"      : ("/tmp/background.jpg",     _pass),
-    "avg_time_seconds"   : ("600",                     _pass),
-    "time_range_seconds" : ("300",                     _pass),
-    "darken_percent"     : ("80%",                     _pass),
+    "directory"          : ("/home/carlos/pics/wall/", "",  noop),
+    "tmp_file_name"      : ("/tmp/background.jpg",     "",  noop),
+    "avg_time_seconds"   : ("600",                     "",  noop),
+    "time_range_seconds" : ("300",                     "",  noop),
+    "darken_percent"     : ("80%",                     "",  noop),
   }
 
   def __init__(self):
     self.last_wallpaper_ = ""
-
-    # TODO would it be better to copy the default dict?
-    self.config = RandomDirectoryBackground.config
+    self.bg_setter = FehBackgroundSetter()
 
   def Next(self):
     # TODO log stuff here
@@ -65,7 +94,7 @@ class RandomDirectoryBackground:
     self.Refresh()
 
   def Refresh(self):
-    subprocess.call(["feh", "--bg-scale", self.config["tmp_file_name"][0]])
+    self.bg_setter.Set(self.config["tmp_file_name"][0])
 
   def Var(self, name=None, new_value=None):
     # TODO implement type description printing
@@ -112,8 +141,9 @@ class RandomDirectoryBackground:
 
   def _SetVar(self, name, new_value):
     if name in self.config:
-      if self.config[name][1](new_value):
-        self.config[name] = (new_value, self.config[name][1])
+      if self.config[name][2](new_value):
+        self.config[name] = (new_value, self.config[name][1],
+                             self.config[name][2])
         return "Value set: " + self._VarDescription(name)
       else:
         return "Invalid value `{0}' for `{1}'".format(new_value, name)
