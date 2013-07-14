@@ -1,0 +1,24 @@
+server
+  command interpreter
+    commands
+      next
+      refresh
+      var [varname [newvalue]]
+      mode [newmode]
+  action timeout
+    time to wait
+    randomized wait (gaussian max range)
+action
+  chooser
+    random from directory(s)
+    from ordered list
+      defined in memory
+      defined in file
+  image processor
+    process
+      darken by percent
+      darken to maximum brightness
+    set background
+      tiled
+      stretched
+      centered

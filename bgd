@@ -1,115 +1,165 @@
-#!/usr/bin/env python2
-
-from functools import wraps
-import errno
-import signal
-
+#!/usr/bin/env python3
 import random
 import os
 import subprocess
 import time
-import sys
+import socketserver
+import threading
 
 """ Cycles through a new background on a schedule. Randomizes time between
 subsequent calls under a gaussian distribution.
 
-Depends on `feh' and `imagemagick'
+Depends on 
+  feh         - For X-related background-setting stuff
+  imagemagick - For image processing
 """
 
-# Average time, in seconds, that the background is changed.
-avg_time = 10.*60.
+def GaussianRandomTime(avg_time, max_range):
+  if max_range == 0:
+    # Don't bother with the math
+    return int(avg_time)
+  else:
+    # 96% of numbers in a gaussian are within 3 stddevs of the mean
+    stddev = max_range/3.
 
-# If the timing is randomized, this gives the maximum deviation, in seconds, of
-# the randomization. Set to 0 to turn it off.
-max_range = 5.*60.
+    # Get a number in a loop to prevent that 4% from occuring
+    while True:
+      num = random.gauss(avg_time, stddev)
+      if avg_time - max_range < num < avg_time + max_range:
+        return int(num)
 
-# Directory of wallpaper images, should only contain image files. Include
-# the trailing slash.
-wallpaper_dir = "/home/carlos/pics/wallpaper/"
+def _pass(s=None):
+  if s is None:
+    return ""
+  else:
+    return True
 
-# How dark (percentage) to make the image (uniform darkening)
-darken_by = 80
+class RandomDirectoryBackground:
+  """Sets backgrounds randomly from a directory. Rescans the directory on
+  wakeup."""
 
-# Name of temporary file to store darkened background
-tmp_name = "/tmp/background.jpg"
+  """ Dictionary of configurable options.
+  key:String, val:(String, func)
+  where func is a function which either takes a string and returns a bool for 
+        whether it validates the for the value specifier, or takes nothing and
+        returns a string describing the how the string should be formatted.
+  """
+  config = {
+    "directory"          : ("/home/carlos/pics/wall/", _pass),
+    "tmp_file_name"      : ("/tmp/background.jpg",     _pass),
+    "avg_time_seconds"   : ("600",                     _pass),
+    "time_range_seconds" : ("300",                     _pass),
+    "darken_percent"     : ("80%",                     _pass),
+  }
 
-log_file_name = "/home/carlos/.bgd_errors"
-safe_dir = "/"
-fifo_name = "/tmp/bgd_fifo"
+  def __init__(self):
+    self.last_wallpaper_ = ""
 
+    # TODO would it be better to copy the default dict?
+    self.config = RandomDirectoryBackground.config
 
-def getTime():
-    if max_range == 0:
-        # Don't bother with the math
-        return int(avg_time)
+  def Next(self):
+    # TODO log stuff here
+    self._ChooseNextWallpaper()
+    self._DarkenAndSaveTmpImage()
+    self.Refresh()
+
+  def Refresh(self):
+    subprocess.call(["feh", "--bg-scale", self.config["tmp_file_name"][0]])
+
+  def Var(self, name=None, new_value=None):
+    # TODO implement type description printing
+    if name is None:
+      return self._AllVarsDescription()
+    elif new_value is None:
+      return self._VarDescription(name)
     else:
-        # 96% of numbers in a gaussian are within 3 stddevs of the mean
-        stddev = max_range/3.
+      return self._SetVar(name, new_value)
 
-        # Get a number in a loop to prevent that 4% from occuring
-        while True:
-            num = random.gauss(avg_time, stddev)
-            if avg_time-max_range < num < avg_time+max_range:
-                return int(num)
-
-def nextBg(log):
-    files = os.listdir(wallpaper_dir)
-
-    # Don't choose the same wallpaper twice in a row
+  def Run(self, server):
+    server.handle_timeout = self.Next
     while True:
-        next_wallpaper = random.choice(files)
-        if next_wallpaper != nextBg.last_wallpaper: 
-            break
-    nextBg.last_wallpaper = next_wallpaper
+      server.timeout = self._NextRandomTime()
+      server.handle_request()
 
-    full_path = wallpaper_dir + next_wallpaper
-    log.write("{0} : {1}\n".format(time.strftime("%c"), full_path))
+  def _DarkenAndSaveTmpImage(self):
+    full_path = self.config["directory"][0] + self.last_wallpaper_
+    subprocess.call(["convert", full_path, "-fill", "black", "-colorize", 
+                     self.config["darken_percent"][0],
+                     self.config["tmp_file_name"][0]])
 
-    subprocess.call(["convert", full_path, "-fill", "black", "-colorize", str(darken_by)+"%", tmp_name])
-    subprocess.call(["feh", "--bg-scale", tmp_name])
-nextBg.last_wallpaper = ""
+  def _ChooseNextWallpaper(self):
+    files = os.listdir(self.config["directory"][0])
+    next_wallpaper = self.last_wallpaper_
+    while next_wallpaper == self.last_wallpaper_:
+      next_wallpaper = random.choice(files)
+    self.last_wallpaper_ = next_wallpaper
 
+  def _AllVarsDescription(self):
+    ret = ""
+    for key in self.config:
+      ret += self._VarDescription(key) + "\n"
+    return ret
 
-def init_daemon():
-    """Sets the process to be a daemon. Returns a tuple of (pid, sid, log_file)
-    """
+  def _InvalidNameMessage(self, name):
+    return "Invalid parameter name `{0}'".format(name)
 
-    # Double fork to prevent zombie children
-    # URL:  http://wordptr.com/2011/01/31/lets-write-a-linux-daemon-part-i/
-    pid = os.fork()
-    if pid < 0:
-        sys.stderr.write("Error forking process\n")
-        sys.exit(1)
-    if pid > 0:
-        sys.exit(0)
+  def _VarDescription(self, key):
+    try:
+      return "{0}={1}".format(key, self.config[key][0])
+    except KeyError:
+      return self._InvalidNameMessage(key)
 
-    pid = os.fork()
-    if pid < 0:
-        sys.stderr.write("Error forking process\n")
-        sys.exit(1)
-    if pid > 0:
-        sys.exit(0)
+  def _SetVar(self, name, new_value):
+    if name in self.config:
+      if self.config[name][1](new_value):
+        self.config[name] = (new_value, self.config[name][1])
+        return "Value set: " + self._VarDescription(name)
+      else:
+        return "Invalid value `{0}' for `{1}'".format(new_value, name)
+    else:
+      return self._InvalidNameMessage(name)
 
-    os.umask(0)
+  def _NextRandomTime(self):
+    return GaussianRandomTime(float(self.config["avg_time_seconds"][0]),
+                              float(self.config["time_range_seconds"][0]))
 
-    log = open(log_file_name, "a")
-    sid = os.setsid()
-    ret = os.chdir(safe_dir)
+class CommandHandler(socketserver.BaseRequestHandler):
+  setter_ = RandomDirectoryBackground()
 
-    sys.stdin.close()
-    sys.stdout.close()
-    sys.stderr.close()
+  def Setter(self):
+    return CommandHandler.setter_
 
-    return (pid, sid, log)
+  def handle(self):
+    if self.client_address[0] != "127.0.0.1":
+      return
 
-def getCommand(log):
-    time.sleep(getTime())
-    nextBg(log)
+    # self.request is the TCP socket connected to the client
+    items = self.request.recv(1024).strip().split()
 
+    def GetOrNone(index):
+      return items[index].decode() if len(items) > index else None
+
+    cmd_str = GetOrNone(0)
+
+    def DoCmd():
+      if cmd_str == 'next':
+        self.Setter().Next()
+        return "Done"
+      elif cmd_str == 'refresh':
+        self.Setter().Refresh()
+        return "Done"
+      elif cmd_str == 'var':
+        varname = GetOrNone(1)
+        new_value = GetOrNone(2)
+        return self.Setter().Var(varname, new_value)
+      else:
+        return "Invalid command"
+
+    self.request.sendall(bytearray(DoCmd(), "UTF-8"))
+
+kDefaultPort = 9999
 if __name__ == "__main__":
-    # daemon_vars = init_daemon()
-    # log = daemon_vars[2]
-
-    nextBg(sys.stderr)
-    while True:
-        getCommand(sys.stderr)
+  host, port = "localhost", kDefaultPort
+  server = socketserver.TCPServer((host, port), CommandHandler)
+  CommandHandler.setter_.Run(server)
