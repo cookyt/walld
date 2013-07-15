@@ -156,10 +156,13 @@ class CommandExecutor(object):
                           self.timer_}
 
   def Run(self, server):
-    server.handle_timeout = lambda : self._HandleNext(None)
-    while True:
-      server.timeout = self.timer_.Reset()
-      server.handle_request()
+    try:
+      server.handle_timeout = lambda : self._HandleNext(None)
+      while True:
+        server.timeout = self.timer_.Reset()
+        server.handle_request()
+    except KeyboardInterrupt:
+      pass
 
   def ParseCommand(self, command):
     args = command.split()
@@ -240,7 +243,7 @@ class CommandHandler(socketserver.BaseRequestHandler):
     self.request.sendall(bytearray(self.executor_.ParseCommand(command),
                          "UTF-8"))
 
-kDefaultPort = 10000
+kDefaultPort = 9999
 if __name__ == "__main__":
   host, port = "localhost", kDefaultPort
   server = socketserver.TCPServer((host, port), CommandHandler)
