@@ -46,6 +46,13 @@ class GaussianRandomTimer:
     time_passed = (time.time() - self.last_call)
     return self.time_interval - time_passed
 
+  def RemainingOrReset(self):
+    """ Returns the remaining time or resets the clock if the time is up """
+    time_left = self.Remaining()
+    if time_left <= 0:
+      time_left = self.Reset()
+    return time_left
+
   def Enabled(self):
     return (int(self.config["avg_time_seconds"][0]) != 0)
 
@@ -158,13 +165,20 @@ class CommandExecutor(object):
     self.timer_ = GaussianRandomTimer()
     self.configurable_ = {self.chooser_, self.setter_, self.processor_,
                           self.timer_}
+    self.previous_request_ = "next"
 
   def Run(self, server):
+    time_reset_commands = {"next"}
+    server.handle_timeout = lambda : self._HandleNext(None)
     try:
-      server.handle_timeout = lambda : self._HandleNext(None)
       while True:
         if self.timer_.Enabled():
-          server.timeout = self.timer_.Reset()
+          if self.previous_request_ in time_reset_commands:
+            server.timeout = self.timer_.Reset()
+            print("time reset to: {0}".format(self.timer_.Remaining()))
+          else:
+            server.timeout = self.timer_.RemainingOrReset()
+            print("time not reset; left: {0}".format(self.timer_.Remaining()))
         else:
           server.timeout = None
         server.handle_request()
@@ -179,6 +193,7 @@ class CommandExecutor(object):
       "next" : self._HandleNext,
       "refresh" : self._HandleRefresh
     }
+    self.previous_request_ = cmd_str
     if cmd_str in commands:
       return commands[cmd_str](args)
     else:
