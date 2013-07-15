@@ -21,7 +21,8 @@ def noop(var):
   return True;
 
 class GaussianRandomTimer:
-  kAvgTimeSecondsDescription = "The mean time in seconds between events"
+  kAvgTimeSecondsDescription = ("The mean time in seconds between events. " + 
+                                "Set to 0 to disable all time-based events.")
   kTimeRangeSecondsDescription = ("The maximum time in seconds from the " + 
       "mean an even can take. Corresponds to three standard deviations from " +
       "the above mean")
@@ -44,6 +45,9 @@ class GaussianRandomTimer:
     """ Returns the remaining time since the last call to Reset() """
     time_passed = (time.time() - self.last_call)
     return self.time_interval - time_passed
+
+  def Enabled(self):
+    return (int(self.config["avg_time_seconds"][0]) != 0)
 
   def _GaussianRandomTime(self):
     avg_time = float(self.config["avg_time_seconds"][0])
@@ -159,7 +163,10 @@ class CommandExecutor(object):
     try:
       server.handle_timeout = lambda : self._HandleNext(None)
       while True:
-        server.timeout = self.timer_.Reset()
+        if self.timer_.Enabled():
+          server.timeout = self.timer_.Reset()
+        else:
+          server.timeout = None
         server.handle_request()
     except KeyboardInterrupt:
       pass
