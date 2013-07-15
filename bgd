@@ -66,14 +66,14 @@ class GaussianRandomTimer:
 class FehBackgroundSetter(object):
   """ Class for setting the background. Uses the program `feh' to do this."""
 
-  kScaleDescription = """
+  kScaleDescription = """\
 The style used to size the image. Supported values are:
   + center
   + fill
   + max
   + scale
   + tile
-See the feh man page for info on what each mean.
+See the feh man page for info on what each mean.\
 """
 
   @staticmethod
@@ -85,7 +85,7 @@ See the feh man page for info on what each mean.
     "image_style" : ("scale", kScaleDescription, _ValidateStyle)
   }
 
-  def Set(self, filepath, style="scale"):
+  def Set(self, filepath):
     """ Sets the background to the given file. Returns True if the command
     succeeds.
       filepath: The background file to use. Can be any of the image types
@@ -108,6 +108,8 @@ class ImageMagickImageDarkener(object):
     subprocess.call(["convert", filepath, "-fill", "black", "-colorize", 
                      self.config["darken_percent"][0],
                      self.config["tmp_file_name"][0]])
+  def TmpFile(self):
+    return self.config["tmp_file_name"][0]
 
 class RandomDirectoryBackground(object):
   """ Sets backgrounds randomly from a directory. Rescans the directory on
@@ -125,121 +127,122 @@ class RandomDirectoryBackground(object):
   """
   config = {
     "directory"          : ("/home/carlos/pics/wall/", "",  noop),
-    "avg_time_seconds"   : ("600",                     "",  noop),
-    "time_range_seconds" : ("300",                     "",  noop),
   }
 
   def __init__(self):
     self.current_wallpaper_ = ""
-    self.bg_setter_ = FehBackgroundSetter()
-    self.darkener_ = ImageMagickImageDarkener()
-    self.timer_ = GaussianRandomTimer()
 
   def Next(self):
-    self._ChooseNextWallpaper()
-
-    full_path = self.config["directory"][0] + self.current_wallpaper_
-    self.darkener_.Process(full_path)
-    
-    self.Refresh()
-
-  def Refresh(self):
-    self.bg_setter_.Set(self.darkener_.config["tmp_file_name"][0])
-
-  def Var(self, name=None, new_value=None):
-    # TODO implement type description printing
-    if name is None:
-      return self._AllVarsDescription()
-    elif new_value is None:
-      return self._VarDescription(name)
-    else:
-      return self._SetVar(name, new_value)
-
-  def Run(self, server):
-    server.handle_timeout = self.Next
-    while True:
-      server.timeout = self.timer_.Reset()
-      server.handle_request()
-
-  def _ChooseNextWallpaper(self):
     files = os.listdir(self.config["directory"][0])
     next_wallpaper = self.current_wallpaper_
     while next_wallpaper == self.current_wallpaper_:
       next_wallpaper = random.choice(files)
     self.current_wallpaper_ = next_wallpaper
 
-  def _AllVarsDescription(self):
-    ret = ""
-    for key in self.config:
-      ret += self._VarDescription(key) + "\n"
-    return ret
+    return self.Current()
 
-  def _InvalidNameMessage(self, name):
-    return "Invalid parameter name `{0}'".format(name)
-
-  def _VarDescription(self, key):
-    try:
-      return "{0}={1}".format(key, self.config[key][0])
-    except KeyError:
-      return self._InvalidNameMessage(key)
-
-  def _SetVar(self, name, new_value):
-    if name in self.config:
-      if self.config[name][2](new_value):
-        self.config[name] = (new_value, self.config[name][1],
-                             self.config[name][2])
-        return "Value set: " + self._VarDescription(name)
-      else:
-        return "Invalid value `{0}' for `{1}'".format(new_value, name)
-    else:
-      return self._InvalidNameMessage(name)
+  def Current(self):
+    return self.config["directory"][0] + self.current_wallpaper_
 
 def GetOrNone(items, index):
   return items[index].decode() if len(items) > index else None
 
-class CommandHandler(socketserver.BaseRequestHandler):
-  setter_ = RandomDirectoryBackground()
+class CommandExecutor(object):
+  def __init__(self):
+    self.chooser_ = RandomDirectoryBackground()
+    self.setter_ = FehBackgroundSetter()
+    self.processor_ = ImageMagickImageDarkener()
+    self.timer_ = GaussianRandomTimer()
+    self.configurable_ = {self.chooser_, self.setter_, self.processor_,
+                          self.timer_}
+
+  def Run(self, server):
+    server.handle_timeout = lambda : self._HandleNext(None)
+    while True:
+      server.timeout = self.timer_.Reset()
+      server.handle_request()
+
+  def ParseCommand(self, command):
+    args = command.split()
+    cmd_str = GetOrNone(args, 0)
+    commands = {
+      "var" : self._HandleVar,
+      "next" : self._HandleNext,
+      "refresh" : self._HandleRefresh
+    }
+    if cmd_str in commands:
+      return commands[cmd_str](args)
+    else:
+      return "error\nInvalid command\n"
 
   def _HandleNext(self, args):
-    self.setter_.Next()
-    return "Done\n"
+    return self._SetWallpaper(self.chooser_.Next())
 
   def _HandleRefresh(self, args):
-    self.setter_.Refresh()
-    return "Done\n"
+    return self._SetWallpaper(self.chooser_.Current())
+
+  def _SetWallpaper(self, fname):
+    print(fname)
+    self.processor_.Process(fname)
+    self.setter_.Set(self.processor_.TmpFile())
+    return "done\n"
 
   def _HandleVar(self, args):
-    varname = GetOrNone(args, 1)
-    new_value = GetOrNone(args, 2)
-    return self.setter_.Var(varname, new_value)
+    if len(args) == 1:
+      return self._AllVarsDescription()
+    elif len(args) == 2:
+      varname = GetOrNone(args, 1)
+      return self._VarDescription(varname)
+    else:
+      varname = GetOrNone(args, 1)
+      new_value = GetOrNone(args, 2)
+      return self._SetVar(varname, new_value)
+  
+  def _DescriptionsForConfig(self, config):
+    ret = ""
+    for key in config:
+      ret += "{0}={1}\n".format(key, config[key][0])
+    return ret
 
-  kCommands = {
-    "var" : _HandleVar,
-    "next" : _HandleNext,
-    "refresh" : _HandleRefresh
-  }
+  def _AllVarsDescription(self):
+    ret = "done\n"
+    for config in self.configurable_:
+      ret += self._DescriptionsForConfig(config.config) + "\n"
+    return ret
 
-  def Setter(self):
-    return CommandHandler.setter_
+  def _VarDescription(self, name):
+    for config_item in self.configurable_:
+      config = config_item.config
+      if name in config:
+        return "done\n{0}={1}\n{2}\n".format(name, config[name][0],
+                                             config[name][1])
+    return "error\nInvalid parameter name `{0}'\n".format(name)
+
+  def _SetVar(self, name, new_value):
+    for config_item in self.configurable_:
+      config = config_item.config
+      if name in config:
+        if config[name][2](new_value):
+          config[name] = (new_value, config[name][1], config[name][2])
+          return "done\nValue set: {0}={1}\n".format(name, new_value)
+        else:
+          return "error\nInvalid value `{0}' for `{1}'\n".format(new_value,
+                                                                 name)
+    return "error\nInvalid parameter name `{0}'\n".format(name)
+
+
+class CommandHandler(socketserver.BaseRequestHandler):
+  executor_ = CommandExecutor()
 
   def handle(self):
     if self.client_address[0] != "127.0.0.1":
       return
-
-    # self.request is the TCP socket connected to the client
-    items = self.request.recv(1024).strip().split()
-
-    cmd_str = GetOrNone(items, 0)
-    def DoCmd():
-      if cmd_str in self.kCommands:
-        return self.kCommands[cmd_str](self, items)
-      else:
-        return "Error\nInvalid command"
-
-    self.request.sendall(bytearray(DoCmd(), "UTF-8"))
+    command = self.request.recv(1024).strip()
+    self.request.sendall(bytearray(self.executor_.ParseCommand(command),
+                         "UTF-8"))
 
 kDefaultPort = 9999
 if __name__ == "__main__":
   host, port = "localhost", kDefaultPort
   server = socketserver.TCPServer((host, port), CommandHandler)
-  CommandHandler.setter_.Run(server)
+  CommandHandler.executor_.Run(server)
