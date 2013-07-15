@@ -76,7 +76,6 @@ The style used to size the image. Supported values are:
 See the feh man page for info on what each mean.\
 """
 
-  @staticmethod
   def _ValidateStyle(style):
     valid_styles = {"center", "fill", "max", "scale", "tile"}
     return (style in valid_styles);
@@ -241,7 +240,7 @@ class CommandHandler(socketserver.BaseRequestHandler):
     self.request.sendall(bytearray(self.executor_.ParseCommand(command),
                          "UTF-8"))
 
-kDefaultPort = 9999
+kDefaultPort = 10000
 if __name__ == "__main__":
   host, port = "localhost", kDefaultPort
   server = socketserver.TCPServer((host, port), CommandHandler)
