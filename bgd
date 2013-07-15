@@ -14,25 +14,54 @@ Depends on
   imagemagick - For image processing
 """
 
-def GaussianRandomTime(avg_time, max_range):
-  if max_range == 0:
-    # Don't bother with the math
-    return int(avg_time)
-  else:
-    # 96% of numbers in a gaussian are within 3 stddevs of the mean
-    stddev = max_range/3.
-
-    # Get a number in a loop to prevent that 4% from occuring
-    while True:
-      num = random.gauss(avg_time, stddev)
-      if avg_time - max_range < num < avg_time + max_range:
-        return int(num)
-
 # TODO this noop is here to stand in for validation functions which haven't been
 # written yet. Replace all instances of calls to this function with a real
 # validation function.
 def noop(var):
   return True;
+
+class GaussianRandomTimer:
+  kAvgTimeSecondsDescription = "The mean time in seconds between events"
+  kTimeRangeSecondsDescription = ("The maximum time in seconds from the " + 
+      "mean an even can take. Corresponds to three standard deviations from " +
+      "the above mean")
+
+  config = {
+    "avg_time_seconds"   : ("600", kAvgTimeSecondsDescription,   noop),
+    "time_range_seconds" : ("300", kTimeRangeSecondsDescription, noop)
+  }
+
+  time_interval = 0
+  last_call = 0
+
+  def Reset(self):
+    """ Resets the timer and returns the new time interval to wait. """
+    self.time_interval = self._GaussianRandomTime()
+    self.last_call = time.time()
+    return self.time_interval
+
+  def Remaining(self):
+    """ Returns the remaining time since the last call to Reset() """
+    time_passed = (time.time() - self.last_call)
+    return self.time_interval - time_passed
+
+  def _GaussianRandomTime(self):
+    avg_time = float(self.config["avg_time_seconds"][0])
+    max_range = float(self.config["time_range_seconds"][0])
+
+    if max_range == 0:
+      # Don't bother with the math
+      return int(avg_time)
+    else:
+      # 96% of numbers in a gaussian are within 3 stddevs of the mean
+      stddev = max_range/3.
+
+      # Get a number in a loop to prevent that 4% from occuring
+      while True:
+        num = random.gauss(avg_time, stddev)
+        if avg_time - max_range < num < avg_time + max_range:
+          return int(num)
+
 
 class FehBackgroundSetter(object):
   """ Class for setting the background. Uses the program `feh' to do this."""
@@ -104,6 +133,7 @@ class RandomDirectoryBackground(object):
     self.current_wallpaper_ = ""
     self.bg_setter_ = FehBackgroundSetter()
     self.darkener_ = ImageMagickImageDarkener()
+    self.timer_ = GaussianRandomTimer()
 
   def Next(self):
     self._ChooseNextWallpaper()
@@ -128,7 +158,7 @@ class RandomDirectoryBackground(object):
   def Run(self, server):
     server.handle_timeout = self.Next
     while True:
-      server.timeout = self._NextRandomTime()
+      server.timeout = self.timer_.Reset()
       server.handle_request()
 
   def _ChooseNextWallpaper(self):
@@ -163,10 +193,6 @@ class RandomDirectoryBackground(object):
         return "Invalid value `{0}' for `{1}'".format(new_value, name)
     else:
       return self._InvalidNameMessage(name)
-
-  def _NextRandomTime(self):
-    return GaussianRandomTime(float(self.config["avg_time_seconds"][0]),
-                              float(self.config["time_range_seconds"][0]))
 
 class CommandHandler(socketserver.BaseRequestHandler):
   setter_ = RandomDirectoryBackground()
