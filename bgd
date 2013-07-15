@@ -28,6 +28,12 @@ def GaussianRandomTime(avg_time, max_range):
       if avg_time - max_range < num < avg_time + max_range:
         return int(num)
 
+# TODO this noop is here to stand in for validation functions which haven't been
+# written yet. Replace all instances of calls to this function with a real
+# validation function.
+def noop(var):
+  return True;
+
 class FehBackgroundSetter(object):
   """ Class for setting the background. Uses the program `feh' to do this."""
 
@@ -59,11 +65,24 @@ See the feh man page for info on what each mean.
     return (subprocess.call(["feh", "--bg-" + self.config["image_style"][0],
                             "--no-fehbg", filepath]) == 0)
 
+class ImageMagickImageDarkener(object):
+  """ Class darkens the image and saves the darkened copy in the tmp_file_name
+  denoted by its config dictionary.
+  """
+
+  config = {
+    "darken_percent"     : ("80%",                     "",  noop),
+    "tmp_file_name"      : ("/tmp/background.jpg",     "",  noop),
+  }
+
+  def Process(self, filepath):
+    subprocess.call(["convert", filepath, "-fill", "black", "-colorize", 
+                     self.config["darken_percent"][0],
+                     self.config["tmp_file_name"][0]])
+
 class RandomDirectoryBackground(object):
   """ Sets backgrounds randomly from a directory. Rescans the directory on
   wakeup."""
-
-  noop = lambda s : True
 
   """ Dictionary of configurable options.
   key:String, val:(value:String, description:String,
@@ -77,24 +96,25 @@ class RandomDirectoryBackground(object):
   """
   config = {
     "directory"          : ("/home/carlos/pics/wall/", "",  noop),
-    "tmp_file_name"      : ("/tmp/background.jpg",     "",  noop),
     "avg_time_seconds"   : ("600",                     "",  noop),
     "time_range_seconds" : ("300",                     "",  noop),
-    "darken_percent"     : ("80%",                     "",  noop),
   }
 
   def __init__(self):
-    self.last_wallpaper_ = ""
-    self.bg_setter = FehBackgroundSetter()
+    self.current_wallpaper_ = ""
+    self.bg_setter_ = FehBackgroundSetter()
+    self.darkener_ = ImageMagickImageDarkener()
 
   def Next(self):
-    # TODO log stuff here
     self._ChooseNextWallpaper()
-    self._DarkenAndSaveTmpImage()
+
+    full_path = self.config["directory"][0] + self.current_wallpaper_
+    self.darkener_.Process(full_path)
+    
     self.Refresh()
 
   def Refresh(self):
-    self.bg_setter.Set(self.config["tmp_file_name"][0])
+    self.bg_setter_.Set(self.darkener_.config["tmp_file_name"][0])
 
   def Var(self, name=None, new_value=None):
     # TODO implement type description printing
@@ -111,18 +131,12 @@ class RandomDirectoryBackground(object):
       server.timeout = self._NextRandomTime()
       server.handle_request()
 
-  def _DarkenAndSaveTmpImage(self):
-    full_path = self.config["directory"][0] + self.last_wallpaper_
-    subprocess.call(["convert", full_path, "-fill", "black", "-colorize", 
-                     self.config["darken_percent"][0],
-                     self.config["tmp_file_name"][0]])
-
   def _ChooseNextWallpaper(self):
     files = os.listdir(self.config["directory"][0])
-    next_wallpaper = self.last_wallpaper_
-    while next_wallpaper == self.last_wallpaper_:
+    next_wallpaper = self.current_wallpaper_
+    while next_wallpaper == self.current_wallpaper_:
       next_wallpaper = random.choice(files)
-    self.last_wallpaper_ = next_wallpaper
+    self.current_wallpaper_ = next_wallpaper
 
   def _AllVarsDescription(self):
     ret = ""
