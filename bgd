@@ -194,8 +194,30 @@ class RandomDirectoryBackground(object):
     else:
       return self._InvalidNameMessage(name)
 
+def GetOrNone(items, index):
+  return items[index].decode() if len(items) > index else None
+
 class CommandHandler(socketserver.BaseRequestHandler):
   setter_ = RandomDirectoryBackground()
+
+  def _HandleNext(self, args):
+    self.setter_.Next()
+    return "Done\n"
+
+  def _HandleRefresh(self, args):
+    self.setter_.Refresh()
+    return "Done\n"
+
+  def _HandleVar(self, args):
+    varname = GetOrNone(args, 1)
+    new_value = GetOrNone(args, 2)
+    return self.setter_.Var(varname, new_value)
+
+  kCommands = {
+    "var" : _HandleVar,
+    "next" : _HandleNext,
+    "refresh" : _HandleRefresh
+  }
 
   def Setter(self):
     return CommandHandler.setter_
@@ -207,24 +229,12 @@ class CommandHandler(socketserver.BaseRequestHandler):
     # self.request is the TCP socket connected to the client
     items = self.request.recv(1024).strip().split()
 
-    def GetOrNone(index):
-      return items[index].decode() if len(items) > index else None
-
-    cmd_str = GetOrNone(0)
-
+    cmd_str = GetOrNone(items, 0)
     def DoCmd():
-      if cmd_str == 'next':
-        self.Setter().Next()
-        return "Done"
-      elif cmd_str == 'refresh':
-        self.Setter().Refresh()
-        return "Done"
-      elif cmd_str == 'var':
-        varname = GetOrNone(1)
-        new_value = GetOrNone(2)
-        return self.Setter().Var(varname, new_value)
+      if cmd_str in self.kCommands:
+        return self.kCommands[cmd_str](self, items)
       else:
-        return "Invalid command"
+        return "Error\nInvalid command"
 
     self.request.sendall(bytearray(DoCmd(), "UTF-8"))
 
