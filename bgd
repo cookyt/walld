@@ -5,6 +5,7 @@ import subprocess
 import time
 import socketserver
 import threading
+import logging
 
 """ Cycles through a new background on a schedule. Randomizes time between
 subsequent calls under a gaussian distribution.
@@ -166,6 +167,7 @@ class CommandExecutor(object):
     self.configurable_ = {self.chooser_, self.setter_, self.processor_,
                           self.timer_}
     self.previous_request_ = "next"
+    self.log = logging.getLogger(__name__)
 
   def Run(self, server):
     time_reset_commands = {"next"}
@@ -175,10 +177,11 @@ class CommandExecutor(object):
         if self.timer_.Enabled():
           if self.previous_request_ in time_reset_commands:
             server.timeout = self.timer_.Reset()
-            print("time reset to: {0}".format(self.timer_.Remaining()))
+            self.log.info("time reset to: {0}".format(self.timer_.Remaining()))
           else:
             server.timeout = self.timer_.RemainingOrReset()
-            print("time not reset; left: {0}".format(self.timer_.Remaining()))
+            self.log.info("time not reset; left: {0}"
+                          .format(self.timer_.Remaining()))
         else:
           server.timeout = None
         server.handle_request()
@@ -206,7 +209,7 @@ class CommandExecutor(object):
     return self._SetWallpaper(self.chooser_.Current())
 
   def _SetWallpaper(self, fname):
-    print(fname)
+    self.log.info("Setting background to: " + fname)
     self.processor_.Process(fname)
     self.setter_.Set(self.processor_.TmpFile())
     return "done\n"
@@ -265,8 +268,18 @@ class CommandHandler(socketserver.BaseRequestHandler):
     self.request.sendall(bytearray(self.executor_.ParseCommand(command),
                          "UTF-8"))
 
-kDefaultPort = 9999
+
+
+kLogFormat = \
+  '%(asctime)-15s - %(name)s - %(levelname)s - %(process)s : %(message)s'
+
+# TODO make configureable
+kLogFile = '/home/carlos/.bgd.log'
+kPidFile = '/home/carlos/.bgd.pid'
+kPort = 9999
+
 if __name__ == "__main__":
-  host, port = "localhost", kDefaultPort
+  logging.basicConfig(filename=kLogFile, format=kLogFormat, level=logging.INFO)
+  host, port = "localhost", kPort
   server = socketserver.TCPServer((host, port), CommandHandler)
   CommandHandler.executor_.Run(server)
