@@ -4,9 +4,9 @@ Retrived from:
 http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/
 """
 
-import sys, os, time, atexit, signal
+import sys, os, time, atexit, signal, logging
 
-class daemon:
+class Daemon:
   """A generic daemon class.
 
   Usage: subclass the daemon class and override the run() method."""
@@ -23,7 +23,7 @@ class daemon:
         # exit first parent
         sys.exit(0) 
     except OSError as err: 
-      sys.stderr.write('First fork failed: {0}\n'.format(err))
+      logging.getLogger('daemon').error('First fork failed: {0}'.format(err))
       sys.exit(1)
   
     # decouple from parent environment
@@ -39,7 +39,7 @@ class daemon:
         # exit from second parent
         sys.exit(0) 
     except OSError as err: 
-      sys.stderr.write('Second fork failed: {0}\n'.format(err))
+      logging.getLogger('daemon').error('Second fork failed: {0}'.format(err))
       sys.exit(1) 
   
     # redirect standard file descriptors
@@ -75,9 +75,8 @@ class daemon:
       pid = None
   
     if pid:
-      message = "pidfile {0} already exist. " + \
-          "Daemon already running?\n"
-      sys.stderr.write(message.format(self.pidfile))
+      message = "pidfile {0} already exist. Is the daemon already running?"
+      logging.getLogger('daemon').error(message.format(self.pidfile))
       sys.exit(1)
     
     # Start the daemon
@@ -95,9 +94,8 @@ class daemon:
       pid = None
   
     if not pid:
-      message = "pidfile {0} does not exist. " + \
-          "Daemon not running?\n"
-      sys.stderr.write(message.format(self.pidfile))
+      message = "pidfile {0} does not exist. Is the daemon not running?"
+      logging.getLogger('daemon').error(message.format(self.pidfile))
       return # not an error in a restart
 
     # Try killing the daemon process
@@ -111,7 +109,7 @@ class daemon:
         if os.path.exists(self.pidfile):
           os.remove(self.pidfile)
       else:
-        print (str(err.args))
+        logging.getLogger('daemon').error(str(err.args))
         sys.exit(1)
 
   def restart(self):
