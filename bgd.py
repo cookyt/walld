@@ -259,16 +259,17 @@ class CommandExecutor(object):
     return "error\nInvalid parameter name `{0}'\n".format(name)
 
 
-class CommandHandler(socketserver.BaseRequestHandler):
-  executor_ = CommandExecutor()
+def CreateHandler(executor):
+  class CommandHandler(socketserver.BaseRequestHandler):
+    executor_ = executor
 
-  def handle(self):
-    if self.client_address[0] != "127.0.0.1":
-      return
-    command = self.request.recv(1024).strip()
-    self.request.sendall(bytearray(self.executor_.ParseCommand(command),
-                         "UTF-8"))
-
+    def handle(self):
+      if self.client_address[0] != "127.0.0.1":
+        return
+      command = self.request.recv(1024).strip()
+      self.request.sendall(bytearray(self.executor_.ParseCommand(command),
+                           "UTF-8"))
+  return CommandHandler
 
 
 kLogFormat = \
@@ -279,8 +280,16 @@ kLogFile = '/home/carlos/.bgd.log'
 kPidFile = '/home/carlos/.bgd.pid'
 kPort = 9999
 
+class BackgroundDaemon(daemon.Daemon):
+  def run(self):
+    logging.basicConfig(filename=kLogFile, format=kLogFormat,
+                        level=logging.INFO)
+    host, port = "localhost", kPort
+    executor = CommandExecutor()
+    server = socketserver.TCPServer((host, port), CreateHandler(executor))
+
+    executor.Run(server)
+
 if __name__ == "__main__":
-  logging.basicConfig(filename=kLogFile, format=kLogFormat, level=logging.INFO)
-  host, port = "localhost", kPort
-  server = socketserver.TCPServer((host, port), CommandHandler)
-  CommandHandler.executor_.Run(server)
+  bgd = BackgroundDaemon(kPidFile)
+  bgd.start()
