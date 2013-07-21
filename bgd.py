@@ -7,6 +7,7 @@ import socketserver
 import threading
 import logging
 import daemon
+import sys
 
 """ Cycles through a new background on a schedule. Randomizes time between
 subsequent calls under a gaussian distribution.
@@ -168,7 +169,7 @@ class CommandExecutor(object):
     self.configurable_ = {self.chooser_, self.setter_, self.processor_,
                           self.timer_}
     self.previous_request_ = "next"
-    self.log = logging.getLogger(__name__)
+    self.log = logging.getLogger('bgd')
 
   def Run(self, server):
     time_reset_commands = {"next"}
@@ -291,5 +292,32 @@ class BackgroundDaemon(daemon.Daemon):
     executor.Run(server)
 
 if __name__ == "__main__":
+  if len(sys.argv) < 2:
+    sys.stderr.write("Error: expected an argument. (try '{0} help')\n"
+                     .format(sys.argv[0]))
+    sys.exit(1)
+
+  daemon_commands = {}
+  def PrintHelp():
+    sys.stderr.write("Background daemon.\n" +
+      "Daemon process which changes the background based on several\n" +
+      "confugurable parameters. Available commands:\n")
+    for key in daemon_commands:
+      sys.stderr.write("\t{0} - {1}\n".format(key, daemon_commands[key][1]))
+    return True
+
   bgd = BackgroundDaemon(kPidFile)
-  bgd.start()
+  daemon_commands = {
+    'start':   (bgd.start,   "Forks off and starts the daemon"),
+    'nofork':  (bgd.run,     "Runs the daemon without detaching the process"),
+    'kill':    (bgd.stop,    "Kills the currently running daemon"),
+    'restart': (bgd.restart, "Restarts the currently running daemon"),
+    'help':    (PrintHelp,   "Prints this help message")
+  }
+
+  if sys.argv[1] in daemon_commands:
+    if not daemon_commands[sys.argv[1]][0]():
+      sys.exit(1)
+  else:
+    sys.stderr.write("Error: unexpected command '{0}'\n".format(sys.argv[1]))
+    sys.exit(1)
