@@ -85,7 +85,7 @@ class Daemon:
     
     # Start the daemon
     self.daemonize()
-    self.run()
+    return self.run()
 
   def stop(self):
     """Stop the daemon."""
@@ -107,22 +107,21 @@ class Daemon:
       while True:
         os.kill(pid, signal.SIGTERM)
         time.sleep(0.1)
-      return True
     except OSError as err:
       e = str(err.args)
       if e.find("No such process") > 0:
         if os.path.exists(self.pidfile):
           os.remove(self.pidfile)
-        sys.stderr.write(
-            "Pid file exists, but daemon not running. Removed file.\n")
+        return True
       else:
         sys.stderr.write(str(err.args))
       return False
 
   def restart(self):
     """Restart the daemon."""
-    self.stop()
-    self.start()
+    if not self.stop():
+      return False
+    return self.start()
 
   def run(self):
     """You should override this method when you subclass Daemon.
