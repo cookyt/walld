@@ -68,19 +68,19 @@ class Daemon:
                                         .format(err))
 
   def start(self):
-    """Start the daemon."""
+    """Start the daemon. Writes out to the PID file, exiting if it already
+    exists."""
 
     # Check for a pidfile to see if the daemon already runs
     try:
       with open(self.pidfile,'r') as pf:
-
         pid = int(pf.read().strip())
     except IOError:
       pid = None
   
     if pid:
-      message = "pidfile {0} already exist. Is the daemon already running?"
-      logging.getLogger('daemon').error(message.format(self.pidfile))
+      message = "pid file {0} already exist. Is the daemon already running?\n"
+      sys.stderr.write(message.format(self.pidfile))
       sys.exit(1)
     
     # Start the daemon
@@ -98,23 +98,26 @@ class Daemon:
       pid = None
   
     if not pid:
-      message = "pidfile {0} does not exist. Is the daemon not running?"
-      logging.getLogger('daemon').error(message.format(self.pidfile))
-      return # not an error in a restart
+      message = "pidfile {0} does not exist. Is the daemon not running?\n"
+      sys.stderr.write(message.format(self.pidfile))
+      return False # not an error in a restart
 
     # Try killing the daemon process
     try:
-      while 1:
+      while True:
         os.kill(pid, signal.SIGTERM)
         time.sleep(0.1)
+      return True
     except OSError as err:
       e = str(err.args)
       if e.find("No such process") > 0:
         if os.path.exists(self.pidfile):
           os.remove(self.pidfile)
+        sys.stderr.write(
+            "Pid file exists, but daemon not running. Removed file.\n")
       else:
-        logging.getLogger('daemon').error(str(err.args))
-        sys.exit(1)
+        sys.stderr.write(str(err.args))
+      return False
 
   def restart(self):
     """Restart the daemon."""
