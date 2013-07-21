@@ -61,7 +61,11 @@ class Daemon:
       f.write(pid + '\n')
   
   def delpid(self):
-    os.remove(self.pidfile)
+    try:
+      os.remove(self.pidfile)
+    except IOError as err:
+      logging.getLogger('daemon').error('PID could not be removed: {0}'
+                                        .format(err))
 
   def start(self):
     """Start the daemon."""
@@ -122,4 +126,3 @@ class Daemon:
     
     It will be called after the process has been daemonized by 
     start() or restart()."""
-
