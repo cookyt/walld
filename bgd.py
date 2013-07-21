@@ -6,6 +6,7 @@ import time
 import socketserver
 import threading
 import logging
+import daemon
 
 """ Cycles through a new background on a schedule. Randomizes time between
 subsequent calls under a gaussian distribution.
