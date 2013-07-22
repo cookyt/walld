@@ -287,7 +287,7 @@ kPort = 9999
 class BackgroundDaemon(daemon.Daemon):
   def run(self):
     logging.basicConfig(filename=kLogFile, format=kLogFormat,
-                        level=logging.INFO)
+                        level=logging.ERROR)
     host, port = "localhost", kPort
     executor = CommandExecutor()
     server = socketserver.TCPServer((host, port), CreateHandler(executor))
