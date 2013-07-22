@@ -280,8 +280,8 @@ kLogFormat = \
   '%(asctime)-15s - %(name)s - %(levelname)s - %(process)s : %(message)s'
 
 # TODO make configureable
-kLogFile = '/home/carlos/.bgd.log'
-kPidFile = '/home/carlos/.bgd.pid'
+kLogFile = '~/.walld.log'
+kPidFile = '~/.walld.pid'
 kPort = 9999
 
 class BackgroundDaemon(daemon.Daemon):
