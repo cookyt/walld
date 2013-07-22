@@ -8,6 +8,7 @@ import threading
 import logging
 import daemon
 import sys
+import signal
 
 """ Cycles through a new background on a schedule. Randomizes time between
 subsequent calls under a gaussian distribution.
@@ -175,6 +176,11 @@ class CommandExecutor(object):
     self.log = logging.getLogger('bgd')
 
   def Run(self, server):
+    def StopServer(signum, frame):
+      self.log.error("SIGTERM caught")
+      raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, StopServer)
+
     time_reset_commands = {"next"}
     server.handle_timeout = lambda : self._HandleNext(None)
     try:
@@ -192,6 +198,8 @@ class CommandExecutor(object):
         server.handle_request()
     except KeyboardInterrupt:
       pass
+    self.log.error("Shutting down daemon")
+    return True
 
   def ParseCommand(self, command):
     args = command.split()
@@ -280,8 +288,8 @@ kLogFormat = \
   '%(asctime)-15s - %(name)s - %(levelname)s - %(process)s : %(message)s'
 
 # TODO make configureable
-kLogFile = '~/.walld.log'
-kPidFile = '~/.walld.pid'
+kLogFile = '/home/carlos/.walld.log'
+kPidFile = '/home/carlos/.walld.pid'
 kPort = 9999
 
 class BackgroundDaemon(daemon.Daemon):
