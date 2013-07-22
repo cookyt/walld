@@ -24,19 +24,20 @@ def noop(var):
   return True;
 
 class GaussianRandomTimer:
-  kAvgTimeSecondsDescription = ("The mean time in seconds between events. " + 
-                                "Set to 0 to disable all time-based events.")
-  kTimeRangeSecondsDescription = ("The maximum time in seconds from the " + 
-      "mean an even can take. Corresponds to three standard deviations from " +
-      "the above mean")
+  def __init__(self):
+    kAvgTimeSecondsDescription = ("The mean time in seconds between events. " + 
+                                  "Set to 0 to disable all time-based events.")
+    kTimeRangeSecondsDescription = ("The maximum time in seconds from the " + 
+        "mean an even can take. Corresponds to three standard deviations " +
+        "from the above mean")
 
-  config = {
-    "avg_time_seconds"   : ("600", kAvgTimeSecondsDescription,   noop),
-    "time_range_seconds" : ("300", kTimeRangeSecondsDescription, noop)
-  }
+    self.config = {
+      "avg_time_seconds"   : ("600", kAvgTimeSecondsDescription,   noop),
+      "time_range_seconds" : ("300", kTimeRangeSecondsDescription, noop)
+    }
 
-  time_interval = 0
-  last_call = 0
+    self.time_interval = 0
+    self.last_call = 0
 
   def Reset(self):
     """ Resets the timer and returns the new time interval to wait. """
@@ -80,23 +81,24 @@ class GaussianRandomTimer:
 class FehBackgroundSetter(object):
   """ Class for setting the background. Uses the program `feh' to do this."""
 
-  kScaleDescription = """\
-The style used to size the image. Supported values are:
-  + center
-  + fill
-  + max
-  + scale
-  + tile
-See the feh man page for info on what each mean.\
-"""
+  def __init__(self):
+    kScaleDescription = (
+      "The style used to size the image. Supported values are:\n" +
+      "\t+ center\n" +
+      "\t+ fill\n" +
+      "\t+ max\n" +
+      "\t+ scale\n" +
+      "\t+ tile\n" +
+      "See the feh man page for info on what each mean."
+    )
 
-  def _ValidateStyle(style):
-    valid_styles = {"center", "fill", "max", "scale", "tile"}
-    return (style in valid_styles);
+    def _ValidateStyle(style):
+      valid_styles = {"center", "fill", "max", "scale", "tile"}
+      return (style in valid_styles);
 
-  config = {
-    "image_style" : ("scale", kScaleDescription, _ValidateStyle)
-  }
+    self.config = {
+      "image_style" : ("scale", kScaleDescription, _ValidateStyle)
+    }
 
   def Set(self, filepath):
     """ Sets the background to the given file. Returns True if the command
@@ -112,10 +114,11 @@ class ImageMagickImageDarkener(object):
   denoted by its config dictionary.
   """
 
-  config = {
-    "darken_percent"     : ("80%",                     "",  noop),
-    "tmp_file_name"      : ("/tmp/background.jpg",     "",  noop),
-  }
+  def __init__(self):
+    self.config = {
+      "darken_percent"     : ("80%",                 "",  noop),
+      "tmp_file_name"      : ("/tmp/background.jpg", "",  noop),
+    }
 
   def Process(self, filepath):
     subprocess.call(["convert", filepath, "-fill", "black", "-colorize", 
@@ -138,11 +141,11 @@ class RandomDirectoryBackground(object):
           valid value should look like
         validator is a function which validates the value
   """
-  config = {
-    "directory"          : ("/home/carlos/pics/wall/", "",  noop),
-  }
 
   def __init__(self):
+    self.config = {
+      "directory"          : ("/home/carlos/pics/wall/", "",  noop),
+    }
     self.current_wallpaper_ = ""
 
   def Next(self):
