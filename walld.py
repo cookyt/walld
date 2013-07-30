@@ -184,6 +184,7 @@ class CommandExecutor(object):
     time_reset_commands = {"next"}
     server.handle_timeout = lambda : self._HandleNext(None)
     try:
+      self._HandleNext(None)
       while True:
         if self.timer_.Enabled():
           if self.previous_request_ in time_reset_commands:
