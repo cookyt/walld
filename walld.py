@@ -117,7 +117,7 @@ class ImageMagickImageDarkener(object):
 
   def __init__(self):
     self.config = {
-      "darken_percent"     : ("80%",                 "",  noop),
+      "darken_percent"     : ("0%",                  "",  noop),
       "tmp_file_name"      : ("/tmp/background.jpg", "",  noop),
     }
 
