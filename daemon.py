@@ -119,8 +119,7 @@ class Daemon:
 
   def restart(self):
     """Restart the daemon."""
-    if not self.stop():
-      return False
+    self.stop()
     return self.start()
 
   def run(self):
