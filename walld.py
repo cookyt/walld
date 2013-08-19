@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-import random
-import os
-import subprocess
-import time
-import socketserver
-import threading
 import logging
-import daemon
-import sys
 import signal
+import socketserver
+import sys
+
+import chooser
+import daemon
+import setter
+import timer
+import processor
 
 """ Cycles through a new background on a schedule. Randomizes time between
 subsequent calls under a gaussian distribution.
@@ -18,158 +18,15 @@ Depends on
   imagemagick - For image processing
 """
 
-# TODO this noop is here to stand in for validation functions which haven't been
-# written yet. Replace all instances of calls to this function with a real
-# validation function.
-def noop(var):
-  return True;
-
-class GaussianRandomTimer:
-  def __init__(self):
-    kAvgTimeSecondsDescription = ("The mean time in seconds between events. " + 
-                                  "Set to 0 to disable all time-based events.")
-    kTimeRangeSecondsDescription = ("The maximum time in seconds from the " + 
-        "mean an even can take. Corresponds to three standard deviations " +
-        "from the above mean")
-
-    self.config = {
-      "avg_time_seconds"   : ("600", kAvgTimeSecondsDescription,   noop),
-      "time_range_seconds" : ("300", kTimeRangeSecondsDescription, noop)
-    }
-
-    self.time_interval = 0
-    self.last_call = 0
-
-  def Reset(self):
-    """ Resets the timer and returns the new time interval to wait. """
-    self.time_interval = self._GaussianRandomTime()
-    self.last_call = time.time()
-    return self.time_interval
-
-  def Remaining(self):
-    """ Returns the remaining time since the last call to Reset() """
-    time_passed = (time.time() - self.last_call)
-    return self.time_interval - time_passed
-
-  def RemainingOrReset(self):
-    """ Returns the remaining time or resets the clock if the time is up """
-    time_left = self.Remaining()
-    if time_left <= 0:
-      time_left = self.Reset()
-    return time_left
-
-  def Enabled(self):
-    return (int(self.config["avg_time_seconds"][0]) != 0)
-
-  def _GaussianRandomTime(self):
-    avg_time = float(self.config["avg_time_seconds"][0])
-    max_range = float(self.config["time_range_seconds"][0])
-
-    if max_range == 0:
-      # Don't bother with the math
-      return int(avg_time)
-    else:
-      # 96% of numbers in a gaussian are within 3 stddevs of the mean
-      stddev = max_range/3.
-
-      # Get a number in a loop to prevent that 4% from occuring
-      while True:
-        num = random.gauss(avg_time, stddev)
-        if avg_time - max_range < num < avg_time + max_range:
-          return int(num)
-
-
-class FehBackgroundSetter(object):
-  """ Class for setting the background. Uses the program `feh' to do this."""
-
-  def __init__(self):
-    kScaleDescription = (
-      "The style used to size the image. Supported values are:\n" +
-      "\t+ center\n" +
-      "\t+ fill\n" +
-      "\t+ max\n" +
-      "\t+ scale\n" +
-      "\t+ tile\n" +
-      "See the feh man page for info on what each mean."
-    )
-
-    def _ValidateStyle(style):
-      valid_styles = {"center", "fill", "max", "scale", "tile"}
-      return (style in valid_styles);
-
-    self.config = {
-      "image_style" : ("scale", kScaleDescription, _ValidateStyle)
-    }
-
-  def Set(self, filepath):
-    """ Sets the background to the given file. Returns True if the command
-    succeeds.
-      filepath: The background file to use. Can be any of the image types
-                supported by `feh', use a full-path.
-    """
-    return (subprocess.call(["feh", "--bg-" + self.config["image_style"][0],
-                            "--no-fehbg", filepath]) == 0)
-
-class ImageMagickImageDarkener(object):
-  """ Class darkens the image and saves the darkened copy in the tmp_file_name
-  denoted by its config dictionary.
-  """
-
-  def __init__(self):
-    self.config = {
-      "darken_percent"     : ("0%",                  "",  noop),
-      "tmp_file_name"      : ("/tmp/background.jpg", "",  noop),
-    }
-
-  def Process(self, filepath):
-    subprocess.call(["convert", filepath, "-fill", "black", "-colorize", 
-                     self.config["darken_percent"][0],
-                     self.config["tmp_file_name"][0]])
-  def TmpFile(self):
-    return self.config["tmp_file_name"][0]
-
-class RandomDirectoryBackground(object):
-  """ Sets backgrounds randomly from a directory. Rescans the directory on
-  wakeup."""
-
-  """ Dictionary of configurable options.
-  key:String, val:(value:String, description:String,
-                   validate:Function(String)->Bool)
-
-  where key is the externally-visible variable name
-        value is the current value of the variable
-        description is a string describing what the variable does and what a
-          valid value should look like
-        validator is a function which validates the value
-  """
-
-  def __init__(self):
-    self.config = {
-      "directory"          : ("/home/carlos/pics/wall/", "",  noop),
-    }
-    self.current_wallpaper_ = ""
-
-  def Next(self):
-    files = os.listdir(self.config["directory"][0])
-    next_wallpaper = self.current_wallpaper_
-    while next_wallpaper == self.current_wallpaper_:
-      next_wallpaper = random.choice(files)
-    self.current_wallpaper_ = next_wallpaper
-
-    return self.Current()
-
-  def Current(self):
-    return self.config["directory"][0] + self.current_wallpaper_
-
 def GetOrNone(items, index):
   return items[index].decode() if len(items) > index else None
 
 class CommandExecutor(object):
   def __init__(self):
-    self.chooser_ = RandomDirectoryBackground()
-    self.setter_ = FehBackgroundSetter()
-    self.processor_ = ImageMagickImageDarkener()
-    self.timer_ = GaussianRandomTimer()
+    self.chooser_ = chooser.RandomDirectoryBackground()
+    self.setter_ = setter.FehBackgroundSetter()
+    self.processor_ = processor.ImageMagickImageDarkener()
+    self.timer_ = timer.GaussianRandomTimer()
     self.configurable_ = {self.chooser_, self.setter_, self.processor_,
                           self.timer_}
     self.previous_request_ = "next"
