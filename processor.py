@@ -14,7 +14,7 @@ class ImageMagickImageDarkener(object):
     }
 
   def Process(self, filepath):
-    subprocess.call(["convert", filepath, "-fill", "black", "-colorize", 
+    subprocess.call(["convert", filepath, "-fill", "black", "-colorize",
                      self.config["darken_percent"][0],
                      self.config["tmp_file_name"][0]])
   def TmpFile(self):

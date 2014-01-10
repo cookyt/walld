@@ -13,7 +13,7 @@ import processor
 """ Cycles through a new background on a schedule. Randomizes time between
 subsequent calls under a gaussian distribution.
 
-Depends on 
+Depends on
   feh         - For X-related background-setting stuff
   imagemagick - For image processing
 """
@@ -95,7 +95,7 @@ class CommandExecutor(object):
       varname = GetOrNone(args, 1)
       new_value = GetOrNone(args, 2)
       return self._SetVar(varname, new_value)
-  
+
   def _DescriptionsForConfig(self, config):
     ret = ""
     for key in config:
